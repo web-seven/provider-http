@@ -11,6 +11,15 @@ on:
         description: "Go version to use if building needs to be done"
         default: "1.26"
         required: false
+      registry-org:
+        description: "Organization to publish to in the target registry"
+        default: "web-seven"
+        required: false
+      mirror:
+        description: "Mirror the package to xpkg.upbound.io"
+        type: boolean
+        default: false
+        required: false
 
 jobs:
   publish-provider-package:
@@ -19,6 +28,8 @@ jobs:
       repository: provider-http
       version: ${{ github.event.inputs.version }}
       go-version: ${{ github.event.inputs.go-version }}
+      registry_org: ${{ github.event.inputs.registry-org }}
+      mirror: ${{ fromJSON(github.event.inputs.mirror) }}
       cleanup-disk: true
     secrets:
       GHCR_PAT: ${{ secrets.GITHUB_TOKEN }}
