@@ -1,0 +1,68 @@
+---
+# ProviderConfig that authenticates outgoing requests with Google Application
+# Credentials held in a Secret. The provider exchanges the service account key
+# for an OAuth2 access token and sends it as a bearer token.
+apiVersion: http.crossplane.io/v1alpha1
+kind: ProviderConfig
+metadata:
+  name: google-identity-from-secret
+spec:
+  credentials:
+    source: None
+  identity:
+    type: GoogleApplicationCredentials
+    source: Secret
+    secretRef:
+      name: gcp-credentials
+      namespace: crossplane-system
+      key: credentials.json
+---
+# ProviderConfig that resolves Google credentials from the provider pod's
+# environment. On GKE this means Workload Identity; no key material is stored
+# in the cluster.
+apiVersion: http.crossplane.io/v1alpha1
+kind: ProviderConfig
+metadata:
+  name: google-identity-injected
+spec:
+  credentials:
+    source: None
+  identity:
+    type: GoogleApplicationCredentials
+    source: InjectedIdentity
+---
+# ProviderConfig requesting a narrower scope than the default
+# https://www.googleapis.com/auth/cloud-platform.
+apiVersion: http.crossplane.io/v1alpha1
+kind: ProviderConfig
+metadata:
+  name: google-identity-scoped
+spec:
+  credentials:
+    source: None
+  identity:
+    type: GoogleApplicationCredentials
+    source: Secret
+    secretRef:
+      name: gcp-credentials
+      namespace: crossplane-system
+      key: credentials.json
+    scopes:
+      - https://www.googleapis.com/auth/compute
+---
+# Namespaced ProviderConfig with the same identity configuration.
+apiVersion: http.m.crossplane.io/v1alpha2
+kind: ProviderConfig
+metadata:
+  name: google-identity-from-secret
+  namespace: default
+spec:
+  credentials:
+    source: None
+  identity:
+    type: GoogleApplicationCredentials
+    source: Secret
+    secretRef:
+      name: gcp-credentials
+      namespace: default
+      key: credentials.json
