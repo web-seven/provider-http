@@ -49,6 +49,7 @@ const (
 	errNotRequest              = "managed resource is not a Request custom resource"
 	errTrackPCUsage            = "cannot track ProviderConfig usage"
 	errNewHttpClient           = "cannot create new Http client"
+	errIdentityTokenSource     = "cannot build identity token source"
 	errProviderNotRetrieved    = "provider could not be retrieved"
 	errFailedToSendHttpRequest = "something went wrong"
 	errFailedToCheckIfUpToDate = "failed to check if request is up to date"
@@ -96,7 +97,7 @@ type connector struct {
 	logger          logging.Logger
 	kube            client.Client
 	usage           *resource.LegacyProviderConfigUsageTracker
-	newHttpClientFn func(log logging.Logger, timeout time.Duration, creds string) (httpClient.Client, error)
+	newHttpClientFn func(log logging.Logger, timeout time.Duration, creds string, opts ...httpClient.Option) (httpClient.Client, error)
 }
 
 // Connect creates a new external client using the provider config.
@@ -138,7 +139,12 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.E
 		creds = string(data)
 	}
 
-	h, err := c.newHttpClientFn(l, utils.WaitTimeout(cr.Spec.ForProvider.WaitTimeout), creds)
+	tokenSource, err := httpClient.LoadIdentityTokenSource(ctx, c.kube, pc.Spec.Identity)
+	if err != nil {
+		return nil, errors.Wrap(err, errIdentityTokenSource)
+	}
+
+	h, err := c.newHttpClientFn(l, utils.WaitTimeout(cr.Spec.ForProvider.WaitTimeout), creds, httpClient.WithTokenSource(tokenSource))
 	if err != nil {
 		return nil, errors.Wrap(err, errNewHttpClient)
 	}

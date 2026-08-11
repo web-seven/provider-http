@@ -35,6 +35,13 @@ type ProviderConfigSpec struct {
 	// Credentials required to authenticate to this provider.
 	Credentials ProviderCredentials `json:"credentials"`
 
+	// Identity used to authenticate outgoing requests. The identity
+	// credentials supplement 'credentials' by configuring a bearer token
+	// source such as OAuth. A request that carries its own Authorization
+	// header keeps that value.
+	// +optional
+	Identity *common.Identity `json:"identity,omitempty"`
+
 	// TLS configuration for HTTPS requests.
 	// +optional
 	TLS *common.TLSConfig `json:"tls,omitempty"`

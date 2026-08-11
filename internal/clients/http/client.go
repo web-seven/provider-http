@@ -13,6 +13,7 @@ import (
 
 	"github.com/crossplane-contrib/provider-http/apis/interfaces"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/logging"
+	"golang.org/x/oauth2"
 )
 
 const (
@@ -40,6 +41,18 @@ type client struct {
 	log                logging.Logger
 	timeout            time.Duration
 	authorizationToken string
+	tokenSource        oauth2.TokenSource
+}
+
+// Option configures a Client.
+type Option func(*client)
+
+// WithTokenSource sets the OAuth2 token source used to authenticate requests
+// that do not carry their own Authorization header.
+func WithTokenSource(ts oauth2.TokenSource) Option {
+	return func(c *client) {
+		c.tokenSource = ts
+	}
 }
 
 type HttpResponse struct {
@@ -128,12 +141,20 @@ func (hc *client) SendRequest(ctx context.Context, method string, url string, bo
 		}, fmt.Errorf("failed to build TLS config: %w", err)
 	}
 
+	var transport http.RoundTripper = &http.Transport{
+		TLSClientConfig: tlsConfig,
+		Proxy:           http.ProxyFromEnvironment, // Use proxy settings from environment
+	}
+
+	// Authenticate through the token source unless the request already carries
+	// its own Authorization header.
+	if _, exists := request.Header[authKey]; !exists && hc.tokenSource != nil {
+		transport = &oauth2.Transport{Source: hc.tokenSource, Base: transport}
+	}
+
 	client := &http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig: tlsConfig,
-			Proxy:           http.ProxyFromEnvironment, // Use proxy settings from environment
-		},
-		Timeout: hc.timeout,
+		Transport: transport,
+		Timeout:   hc.timeout,
 	}
 
 	response, err := client.Do(request)
@@ -172,12 +193,18 @@ func (hc *client) SendRequest(ctx context.Context, method string, url string, bo
 }
 
 // NewClient returns a new Http Client
-func NewClient(log logging.Logger, timeout time.Duration, authorizationToken string) (Client, error) {
-	return &client{
+func NewClient(log logging.Logger, timeout time.Duration, authorizationToken string, opts ...Option) (Client, error) {
+	c := &client{
 		log:                log,
 		timeout:            timeout,
 		authorizationToken: authorizationToken,
-	}, nil
+	}
+
+	for _, opt := range opts {
+		opt(c)
+	}
+
+	return c, nil
 }
 
 // toJSON converts the request to a JSON string.
