@@ -49,6 +49,7 @@ const (
 	errNotRequest              = "managed resource is not a namespaced Request custom resource"
 	errTrackPCUsage            = "cannot track ProviderConfig usage"
 	errNewHttpClient           = "cannot create new Http client"
+	errIdentityTokenSource     = "cannot build identity token source"
 	errFailedToSendHttpRequest = "something went wrong"
 	errFailedToCheckIfUpToDate = "failed to check if request is up to date"
 	errGetLatestVersion        = "failed to get the latest version of the resource"
@@ -98,7 +99,7 @@ type connector struct {
 	logger          logging.Logger
 	kube            client.Client
 	usage           *resource.ProviderConfigUsageTracker
-	newHttpClientFn func(log logging.Logger, timeout time.Duration, creds string) (httpClient.Client, error)
+	newHttpClientFn func(log logging.Logger, timeout time.Duration, creds string, opts ...httpClient.Option) (httpClient.Client, error)
 }
 
 // Connect creates a new external client using the provider config.
@@ -127,6 +128,7 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.E
 
 	var cd apisv1alpha2.ProviderCredentials
 	var providerTLS *common.TLSConfig
+	var identity *common.Identity
 
 	// Switch to ModernManaged resource to get ProviderConfigRef
 	m := mg.(resource.ModernManaged)
@@ -140,6 +142,7 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.E
 		}
 		cd = pc.Spec.Credentials
 		providerTLS = pc.Spec.TLS
+		identity = pc.Spec.Identity
 	case "ClusterProviderConfig":
 		cpc := &apisv1alpha2.ClusterProviderConfig{}
 		if err := c.kube.Get(ctx, types.NamespacedName{Name: ref.Name}, cpc); err != nil {
@@ -147,6 +150,7 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.E
 		}
 		cd = cpc.Spec.Credentials
 		providerTLS = cpc.Spec.TLS
+		identity = cpc.Spec.Identity
 	default:
 		return nil, errors.Errorf("unsupported provider config kind: %s", ref.Kind)
 	}
@@ -156,7 +160,12 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.E
 		return nil, errors.Wrap(err, errExtractCredentials)
 	}
 
-	h, err := c.newHttpClientFn(l, utils.WaitTimeout(cr.Spec.ForProvider.WaitTimeout), string(data))
+	tokenSource, err := httpClient.LoadIdentityTokenSource(ctx, c.kube, identity)
+	if err != nil {
+		return nil, errors.Wrap(err, errIdentityTokenSource)
+	}
+
+	h, err := c.newHttpClientFn(l, utils.WaitTimeout(cr.Spec.ForProvider.WaitTimeout), string(data), httpClient.WithTokenSource(tokenSource))
 	if err != nil {
 		return nil, errors.Wrap(err, errNewHttpClient)
 	}

@@ -205,6 +205,11 @@ func (in *ProviderConfigList) DeepCopyObject() runtime.Object {
 func (in *ProviderConfigSpec) DeepCopyInto(out *ProviderConfigSpec) {
 	*out = *in
 	in.Credentials.DeepCopyInto(&out.Credentials)
+	if in.Identity != nil {
+		in, out := &in.Identity, &out.Identity
+		*out = new(common.Identity)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.TLS != nil {
 		in, out := &in.TLS, &out.TLS
 		*out = new(common.TLSConfig)
